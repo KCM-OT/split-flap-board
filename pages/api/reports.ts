@@ -1,12 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { PDFReport } from '@/lib/pdf-parser';
+import { PDFReport, parsePDFReport } from '@/lib/pdf-parser';
+import * as fs from 'fs';
+import * as path from 'path';
 
 let reportHistory: PDFReport[] = [];
+let initialized = false;
+
+async function initializeMockData() {
+  if (initialized) return;
+
+  try {
+    const pdfPath = path.join(process.cwd(), 'pdf-reports', 'usefulness-study_report_nxw7mthavmev.pdf');
+    if (fs.existsSync(pdfPath)) {
+      const report = await parsePDFReport(pdfPath);
+      reportHistory = [report];
+    }
+  } catch (error) {
+    console.error('Failed to load mock PDF:', error);
+  }
+
+  initialized = true;
+}
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  await initializeMockData();
+
   if (req.method === 'GET') {
     const action = req.query.action as string;
 

@@ -1,0 +1,16 @@
+node_modules/
+.env.local
+.env
+dist/
+build/
+.next/
+out/
+.DS_Store
+*.log
+.vercel/
+.idea/
+*.swp
+*.swo
+*~
+pdf-reports/
+!pdf-reports/.gitkeep

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy KPI Cards — Split-Flap Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg-1:#0b0d10;
+    --page-bg-2:#15181c;
+    --frame-1:#2a2d32;
+    --frame-2:#1b1d21;
+    --flap-bg:#17181b;
+    --flap-bg-2:#101113;
+    --seam:rgba(0,0,0,.55);
+    --seam-hi:rgba(255,255,255,.05);
+    --letter:#ece6d8;
+    --muted:#8b909a;
+    --divider:#3a3e44;
+    --green:#6fcf97;
+    --gold:#f2b807;
+    --coral:#ff7a59;
+    --grey:#7d8590;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    min-height:100%;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #1c2027 0%, transparent 60%),
+      linear-gradient(160deg,var(--page-bg-1),var(--page-bg-2));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px 16px;
+    font-family:'Inter',sans-serif;
+  }
+
+  .stage{
+    width:100%;
+    max-width:1160px;
+    overflow-x:auto;
+    padding-bottom:4px;
+  }
+
+  .board-frame{
+    position:relative;
+    background:linear-gradient(180deg,var(--frame-1),var(--frame-2));
+    border-radius:16px;
+    padding:34px 36px 26px;
+    min-width:1040px;
+    box-shadow:
+      0 30px 60px rgba(0,0,0,.55),
+      inset 0 1px 0 rgba(255,255,255,.07),
+      inset 0 -1px 0 rgba(0,0,0,.4);
+    border:1px solid #05060700;
+  }
+
+  .board-frame::before{
+    content:"";
+    position:absolute;
+    inset:10px;
+    border-radius:10px;
+    pointer-events:none;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.35);
+  }
+
+  .hero-wrap{ display:flex; justify-content:center; margin-bottom:18px; }
+  .sub-wrap{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:26px;
+    padding-bottom:18px;
+    border-bottom:1px solid var(--divider);
+  }
+  .sub-flap{ display:flex; }
+
+  .clock{
+    font-family:'Inter',sans-serif;
+    font-variant-numeric:tabular-nums;
+    color:var(--muted);
+    font-size:14px;
+    letter-spacing:.04em;
+  }
+  .clock span{ color:#c7cad0; font-weight:600; }
+
+  .table-head{
+    display:grid;
+    grid-template-columns: var(--w-metric) var(--w-votes) var(--w-score) var(--w-status);
+    column-gap:28px;
+    padding:0 2px 10px;
+    color:var(--muted);
+    font-size:12px;
+    letter-spacing:.14em;
+    font-weight:600;
+  }
+
+  .rows{ display:flex; flex-direction:column; gap:10px; }
+
+  .row{
+    display:grid;
+    grid-template-columns: var(--w-metric) var(--w-votes) var(--w-score) var(--w-status);
+    column-gap:28px;
+    align-items:center;
+    opacity:0;
+    transform:translateY(8px);
+    transition:opacity .45s ease, transform .45s ease;
+    padding:6px 2px;
+    border-radius:8px;
+  }
+  .row.visible{ opacity:1; transform:translateY(0); }
+
+  .flap-group{ display:flex; gap:2px; }
+  .flap-group.status .face{ font-weight:800; }
+
+  .flap{
+    position:relative;
+    perspective:240px;
+    border-radius:3px;
+    background:linear-gradient(180deg,#202226,#141518);
+    box-shadow:0 1px 0 rgba(255,255,255,.04), 0 2px 4px rgba(0,0,0,.4);
+  }
+  .flap-inner{
+    position:absolute; inset:0;
+    transform-style:preserve-3d;
+    transition:transform 85ms linear;
+  }
+  .flap-inner.flip{ transform:rotateX(-180deg); }
+  .face{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    backface-visibility:hidden;
+    font-family:'Big Shoulders Display',sans-serif;
+    color:var(--letter);
+    font-weight:700;
+    line-height:1;
+  }
+  .face.front{ transform:rotateX(0deg); }
+  .face.back{ transform:rotateX(180deg); }
+  .flap-seam{
+    position:absolute; left:0; right:0; top:50%; height:1px;
+    background:var(--seam);
+    box-shadow:0 1px 0 var(--seam-hi);
+    z-index:4;
+    pointer-events:none;
+  }
+
+  .status-ON.TIME, .status-on-time{ color:var(--green); }
+  .col-status .flap-group.color-green .face{ color:var(--green); }
+  .col-status .flap-group.color-gold .face{ color:var(--gold); }
+  .col-status .flap-group.color-coral .face{ color:var(--coral); }
+  .col-status .flap-group.color-grey .face{ color:var(--grey); }
+
+  .nameplate{
+    margin-top:24px;
+    padding-top:16px;
+    border-top:1px solid var(--divider);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:11px;
+    letter-spacing:.08em;
+    color:var(--muted);
+  }
+
+  .replay-btn{
+    appearance:none;
+    border:1px solid var(--divider);
+    background:linear-gradient(180deg,#24262b,#1a1c20);
+    color:#c7cad0;
+    font-family:'Inter',sans-serif;
+    font-size:11px;
+    letter-spacing:.1em;
+    padding:8px 14px;
+    border-radius:6px;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .replay-btn:hover{ background:linear-gradient(180deg,#2b2e33,#1e2024); }
+  .replay-btn:active{ transform:translateY(1px); }
+  .replay-btn:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .flap-inner{ transition:none; }
+    .row{ transition:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="board-frame"
+       style="--w-metric:576px; --w-votes:78px; --w-score:104px; --w-status:234px;">
+
+    <div class="hero-wrap" id="hero"></div>
+
+    <div class="sub-wrap">
+      <div class="sub-flap" id="sub"></div>
+      <div class="clock" id="clock">--:--:-- <span id="clock-period"></span></div>
+    </div>
+
+    <div class="table-head">
+      <span>METRIC</span>
+      <span>VOTES</span>
+      <span>SCORE</span>
+      <span>STATUS</span>
+    </div>
+
+    <div class="rows" id="rows"></div>
+
+    <div class="nameplate">
+      <span>MODEL SF·24 &nbsp;·&nbsp; SOURCE: MAZE REPORT &nbsp;·&nbsp; N = 2 RESPONDENTS</span>
+      <button class="replay-btn" id="replay">REFRESH BOARD</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ALPHABET = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/%-";
+
+const SIZES = {
+  hero:  { w:40, h:56, fs:34 },
+  sub:   { w:24, h:36, fs:20 },
+  table: { w:22, h:32, fs:18 },
+};
+
+function buildFlapCell(size){
+  const flap = document.createElement('div');
+  flap.className = 'flap';
+  flap.style.width = size.w + 'px';
+  flap.style.height = size.h + 'px';
+
+  const inner = document.createElement('div');
+  inner.className = 'flap-inner';
+
+  const front = document.createElement('div');
+  front.className = 'face front';
+  front.style.fontSize = size.fs + 'px';
+  front.textContent = ' ';
+
+  const back = document.createElement('div');
+  back.className = 'face back';
+  back.style.fontSize = size.fs + 'px';
+  back.textContent = ' ';
+
+  inner.appendChild(front);
+  inner.appendChild(back);
+
+  const seam = document.createElement('div');
+  seam.className = 'flap-seam';
+
+  flap.appendChild(inner);
+  flap.appendChild(seam);
+
+  flap._front = front;
+  flap._back = back;
+  flap._inner = inner;
+  return flap;
+}
+
+function spinFlap(flap, targetChar, opts={}){
+  const idx = ALPHABET.indexOf(targetChar);
+  const steps = opts.steps ?? (8 + Math.floor(Math.random()*7));
+  const baseDelay = opts.baseDelay ?? 55;
+
+  if (idx === -1) {
+    flap._front.textContent = targetChar;
+    return Promise.resolve();
+  }
+
+  const sequence = [];
+  for (let i = steps; i >= 0; i--){
+    const pos = ((idx - i) % ALPHABET.length + ALPHABET.length) % ALPHABET.length;
+    sequence.push(ALPHABET[pos]);
+  }
+
+  return new Promise(resolve => {
+    let i = 0;
+    function step(){
+      if (i >= sequence.length){ resolve(); return; }
+      const nextChar = sequence[i];
+      flap._back.textContent = nextChar;
+      flap._inner.classList.add('flip');
+
+      const onEnd = () => {
+        flap._inner.removeEventListener('transitionend', onEnd);
+        flap._inner.style.transition = 'none';
+        flap._inner.classList.remove('flip');
+        flap._front.textContent = nextChar;
+        void flap._inner.offsetWidth;
+        flap._inner.style.transition = '';
+        i++;
+        const remaining = sequence.length - i;
+        const delay = remaining < 3 ? baseDelay * 1.8 : baseDelay;
+        setTimeout(step, delay);
+      };
+      flap._inner.addEventListener('transitionend', onEnd, { once:true });
+    }
+    step();
+  });
+}
+
+function buildFlapGroup(text, sizeKey, extraClass){
+  const size = SIZES[sizeKey];
+  const group = document.createElement('div');
+  group.className = 'flap-group' + (extraClass ? ' ' + extraClass : '');
+  const cells = [];
+  for (const ch of text){
+    const cell = buildFlapCell(size);
+    group.appendChild(cell);
+    cells.push(cell);
+  }
+  group._cells = cells;
+  return group;
+}
+
+async function revealGroup(group, text, opts={}){
+  const cells = group._cells;
+  const jobs = [];
+  for (let i = 0; i < cells.length; i++){
+    const ch = text[i] ?? ' ';
+    const delay = i * (opts.stagger ?? 22);
+    jobs.push(new Promise(res => {
+      setTimeout(() => { spinFlap(cells[i], ch, opts).then(res); }, delay);
+    }));
+  }
+  await Promise.all(jobs);
+}
+
+function pad(str, width){
+  return str.toUpperCase().padEnd(width, ' ').slice(0, width);
+}
+
+const STATUS_COLOR = {
+  'ON TIME':'color-green',
+  'BOARDING':'color-gold',
+  'DELAYED':'color-coral',
+  'CANCELLED':'color-grey',
+};
+
+const DATA = [
+  { metric:'ON-TIME COMPLETION',      votes:'2/2', score:'100%', status:'ON TIME'   },
+  { metric:'CYCLE TIME BY STAGE',     votes:'1/2', score:'50%',  status:'BOARDING'  },
+  { metric:'RESIDUAL RISK TREND',     votes:'1/2', score:'50%',  status:'BOARDING'  },
+  { metric:'SETUP EASE',              votes:'1/1', score:'4/5',  status:'ON TIME'   },
+  { metric:'USE FREQUENTLY',          votes:'1/1', score:'4/5',  status:'ON TIME'   },
+  { metric:'TRUST FOR DECISIONS',     votes:'1/1', score:'4/5',  status:'ON TIME'   },
+  { metric:'FOUND COMPLEX',           votes:'1/1', score:'4/5',  status:'DELAYED'   },
+  { metric:'OPEN INSIGHTS CAPTURED',  votes:'0/3', score:'--',   status:'CANCELLED' },
+];
+
+const W_METRIC = 22, W_VOTES = 3, W_SCORE = 4, W_STATUS = 9;
+
+const heroEl = document.getElementById('hero');
+const subEl = document.getElementById('sub');
+const rowsEl = document.getElementById('rows');
+
+const heroGroup = buildFlapGroup('PRIVACY KPI CARDS', 'hero');
+heroEl.appendChild(heroGroup);
+
+const subGroup = buildFlapGroup('USEFULNESS STUDY', 'sub');
+subEl.appendChild(subGroup);
+
+const rowEls = DATA.map(d => {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const metricGroup = buildFlapGroup(pad(d.metric, W_METRIC), 'table', 'metric');
+  const votesGroup  = buildFlapGroup(pad(d.votes, W_VOTES), 'table', 'votes');
+  const scoreGroup  = buildFlapGroup(pad(d.score, W_SCORE), 'table', 'score');
+  const statusGroup = buildFlapGroup(pad(d.status, W_STATUS), 'table', 'status ' + (STATUS_COLOR[d.status] || ''));
+
+  row.appendChild(metricGroup);
+  row.appendChild(votesGroup);
+  row.appendChild(scoreGroup);
+  row.appendChild(statusGroup);
+
+  rowsEl.appendChild(row);
+  return { row, groups: { metricGroup, votesGroup, scoreGroup, statusGroup } };
+});
+
+async function runSequence(){
+  await revealGroup(heroGroup, 'PRIVACY KPI CARDS', { stagger:26, baseDelay:60 });
+  await new Promise(r => setTimeout(r, 150));
+  await revealGroup(subGroup, 'USEFULNESS STUDY', { stagger:18, baseDelay:50 });
+  await new Promise(r => setTimeout(r, 200));
+
+  for (let i = 0; i < DATA.length; i++){
+    const { row, groups } = rowEls[i];
+    const d = DATA[i];
+    row.classList.add('visible');
+    await new Promise(r => setTimeout(r, 90));
+    revealGroup(groups.metricGroup, pad(d.metric, W_METRIC), { stagger:12, baseDelay:34 });
+    revealGroup(groups.votesGroup,  pad(d.votes, W_VOTES),  { stagger:12, baseDelay:34 });
+    revealGroup(groups.scoreGroup,  pad(d.score, W_SCORE),  { stagger:12, baseDelay:34 });
+    await revealGroup(groups.statusGroup, pad(d.status, W_STATUS), { stagger:12, baseDelay:34 });
+    await new Promise(r => setTimeout(r, 160));
+  }
+}
+
+function tickClock(){
+  const now = new Date();
+  let h = now.getHours();
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  const period = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  document.getElementById('clock').innerHTML =
+    `${String(h).padStart(2,'0')}:${m}:${s} <span>${period}</span>`;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+async function resetBoard(){
+  rowEls.forEach(({row}) => row.classList.remove('visible'));
+  [heroGroup, subGroup, ...rowEls.flatMap(r => Object.values(r.groups))].forEach(g => {
+    g._cells.forEach(c => { c._front.textContent = ' '; });
+  });
+  await new Promise(r => setTimeout(r, 250));
+  runSequence();
+}
+
+document.getElementById('replay').addEventListener('click', resetBoard);
+
+runSequence();
+</script>
+</body>
+</html>

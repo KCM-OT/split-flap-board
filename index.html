@@ -166,6 +166,8 @@
     color:var(--muted);
   }
 
+  .nameplate-actions{ display:flex; align-items:center; gap:8px; }
+
   .replay-btn{
     appearance:none;
     border:1px solid var(--divider);
@@ -182,6 +184,26 @@
   .replay-btn:hover{ background:linear-gradient(180deg,#2b2e33,#1e2024); }
   .replay-btn:active{ transform:translateY(1px); }
   .replay-btn:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
+
+  .upload-btn{
+    appearance:none;
+    border:1px solid var(--divider);
+    background:linear-gradient(180deg,#212226,#191a1d);
+    color:#c0c3c9;
+    width:46px;
+    height:31px;
+    padding:0;
+    border-radius:5px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .upload-btn svg{ width:14px; height:16px; display:block; }
+  .upload-btn:hover{ background:linear-gradient(180deg,#3a3c44,#191a1d); }
+  .upload-btn:active{ transform:translateY(1px); }
+  .upload-btn:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
 
   @media (prefers-reduced-motion: reduce){
     .flap-inner{ transition:none; }
@@ -213,7 +235,15 @@
 
     <div class="nameplate">
       <span>MODEL SF·24 &nbsp;·&nbsp; SOURCE: MAZE REPORT &nbsp;·&nbsp; N = 2 RESPONDENTS</span>
-      <button class="replay-btn" id="replay">REFRESH BOARD</button>
+      <div class="nameplate-actions">
+        <button class="upload-btn" id="upload" type="button" aria-label="Upload report" title="Upload report">
+          <svg viewBox="16 7 14 16" fill="currentColor" aria-hidden="true">
+            <path d="M23.5 9.71875V18.5C23.5 18.7812 23.2812 19 23 19C22.7188 19 22.5 18.7812 22.5 18.5V9.71875L19.8438 12.3438C19.6562 12.5625 19.3438 12.5625 19.1562 12.3438C18.9688 12.1562 18.9688 11.8438 19.1562 11.6562L22.6562 8.15625C22.8438 7.9375 23.1562 7.9375 23.3438 8.15625L26.8438 11.6562C27.0625 11.8438 27.0625 12.1562 26.8438 12.3438C26.6562 12.5625 26.3438 12.5625 26.1562 12.3438L23.5 9.71875ZM21 18H18C17.4375 18 17 18.4375 17 19V21C17 21.5625 17.4375 22 18 22H28C28.5625 22 29 21.5625 29 21V19C29 18.4375 28.5625 18 28 18H25V17H28C29.0938 17 30 17.9062 30 19V21C30 22.0938 29.0938 23 28 23H18C16.9062 23 16 22.0938 16 21V19C16 17.9062 16.9062 17 18 17H21V18ZM26 20C26 19.5938 26.3438 19.25 26.75 19.25C27.1562 19.25 27.5 19.5938 27.5 20C27.5 20.4062 27.1562 20.75 26.75 20.75C26.3438 20.75 26 20.4062 26 20Z"/>
+          </svg>
+        </button>
+        <input type="file" id="upload-input" accept="application/pdf" hidden>
+        <button class="replay-btn" id="replay">REFRESH BOARD</button>
+      </div>
     </div>
   </div>
 </div>
@@ -424,6 +454,9 @@ async function resetBoard(){
 }
 
 document.getElementById('replay').addEventListener('click', resetBoard);
+document.getElementById('upload').addEventListener('click', () => {
+  document.getElementById('upload-input').click();
+});
 
 runSequence();
 </script>

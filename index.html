@@ -678,18 +678,30 @@ function parseMazeReport(fullText){
   const result = { title:null, responses:null, blocks:null, metrics:[], scales:{}, openTotal:0, openAnswered:0 };
 
   // The report's own title (e.g. "Privacy KPI Cards") sits on its own line
-  // right after the "Maze version - <study type>" line. It's title-cased —
-  // each word is either ALL CAPS (an acronym like "KPI") or Capitalized —
-  // whereas the decorative background artwork next to it OCRs as lowercase
-  // noise words, so keeping only the leading run of title-cased words drops
-  // that noise instead of appending it to the title.
+  // right after the "Maze version - <study type>" line. Its words are either
+  // ALL CAPS (an acronym like "KPI"), Capitalized, a number, or a short
+  // lowercase connector ("of", "vs", ...), whereas the decorative background
+  // artwork next to it OCRs as arbitrary lowercase noise fragments — so
+  // keeping only the leading run of words that fit one of those patterns
+  // drops the noise without truncating a real multi-word title early.
+  const TITLE_CONNECTORS = new Set(['OF','AND','THE','FOR','IN','ON','TO','VS','VS.','A','AN','&']);
   const titleLineMatch = norm.match(/Maze version\s*-\s*[^\n]*\n+([^\n]+)/i);
   if (titleLineMatch){
     const words = titleLineMatch[1].trim().split(/\s+/);
     const kept = [];
     for (const w of words){
-      if (/^[A-Z]+$/.test(w) || /^[A-Z][a-z]+$/.test(w)) kept.push(w);
+      const isAcronym = /^[A-Z]+$/.test(w);
+      const isCapitalized = /^[A-Z][a-z]+$/.test(w);
+      const isNumber = /^\d+$/.test(w);
+      const isConnector = TITLE_CONNECTORS.has(w.toUpperCase().replace(/\.$/, ''));
+      if (isAcronym || isCapitalized || isNumber || isConnector) kept.push(w);
       else break;
+    }
+    // A trailing connector word means the run ended on a mid-title word that
+    // happened to look like noise (or the line legitimately trails off) —
+    // drop it rather than keep a title that ends on "of" or "and".
+    while (kept.length && TITLE_CONNECTORS.has(kept[kept.length - 1].toUpperCase().replace(/\.$/, ''))){
+      kept.pop();
     }
     if (kept.length) result.title = kept.join(' ').toUpperCase();
   }

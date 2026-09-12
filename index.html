@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Privacy KPI Cards — Split-Flap Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
     --page-bg-1:#0b0d10;
@@ -205,9 +205,102 @@
   .upload-btn:active{ transform:translateY(1px); }
   .upload-btn:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
 
+  .modal-overlay{
+    position:fixed; inset:0;
+    background:rgba(5,6,7,.72);
+    display:flex; align-items:center; justify-content:center;
+    z-index:100;
+    opacity:0; pointer-events:none;
+    transition:opacity .2s ease;
+    padding:16px;
+  }
+  .modal-overlay.open{ opacity:1; pointer-events:auto; }
+
+  .upload-modal{
+    position:relative;
+    width:412px;
+    max-width:100%;
+    background:linear-gradient(180deg,#26282c,#1a1b1e);
+    border-radius:13px;
+    padding:17px;
+    box-shadow:
+      0 30px 60px rgba(0,0,0,.55),
+      inset 0 1px 0 rgba(255,255,255,.06);
+    transform:translateY(8px);
+    transition:transform .2s ease;
+  }
+  .modal-overlay.open .upload-modal{ transform:translateY(0); }
+
+  .modal-close{
+    appearance:none; border:none; background:none;
+    position:absolute; top:10px; right:12px;
+    color:var(--muted);
+    font-family:'Inter',sans-serif;
+    font-size:18px; line-height:1;
+    cursor:pointer;
+    padding:4px;
+  }
+  .modal-close:hover{ color:#c7cad0; }
+  .modal-close:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
+
+  .upload-modal-panel{
+    border:1px solid #18191c;
+    border-radius:7px;
+    padding:26px 24px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  .upload-row{ display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .upload-row-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:18px;
+    color:var(--muted);
+    letter-spacing:.02em;
+    transition:color .2s ease;
+  }
+  .upload-row.active .upload-row-label{ color:#c0c3c9; }
+  .upload-row.done .upload-row-label{ color:#c0c3c9; }
+  .upload-row.error .upload-row-label{ color:var(--coral); }
+
+  .flap-group.pct .flap{ width:22px; height:33px; }
+  .flap-group.pct .face{ font-size:20px; font-family:'IBM Plex Sans Condensed','Inter',sans-serif; }
+  .flap-group.pct.pct-error .face{ color:var(--coral); }
+
+  .upload-modal-message{
+    font-family:'Inter',sans-serif;
+    font-size:12px;
+    color:var(--coral);
+    text-align:center;
+    min-height:16px;
+    margin-top:-4px;
+  }
+
+  .modal-continue-btn{
+    appearance:none;
+    align-self:center;
+    margin-top:6px;
+    border:1px solid var(--divider);
+    background:linear-gradient(180deg,#212226,#191a1d);
+    color:#c0c3c9;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:15px;
+    letter-spacing:.04em;
+    padding:11px 20px;
+    border-radius:5px;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease, opacity .15s ease;
+  }
+  .modal-continue-btn:hover:not(:disabled){ background:linear-gradient(180deg,#2b2d33,#1e2024); }
+  .modal-continue-btn:active:not(:disabled){ transform:translateY(1px); }
+  .modal-continue-btn:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
+  .modal-continue-btn:disabled{ opacity:.35; cursor:not-allowed; }
+
   @media (prefers-reduced-motion: reduce){
     .flap-inner{ transition:none; }
     .row{ transition:none; }
+    .modal-overlay, .upload-modal{ transition:none; }
   }
 </style>
 </head>
@@ -248,6 +341,30 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-overlay">
+  <div class="upload-modal" role="dialog" aria-modal="true" aria-label="Upload a MAZE report PDF">
+    <button class="modal-close" id="modal-close" type="button" aria-label="Close">&times;</button>
+    <div class="upload-modal-panel">
+      <div class="upload-row" id="row-uploading">
+        <span class="upload-row-label">UPLOADING</span>
+        <div class="flap-group pct" id="pct-uploading"></div>
+      </div>
+      <div class="upload-row" id="row-verifying">
+        <span class="upload-row-label">VERIFYING</span>
+        <div class="flap-group pct" id="pct-verifying"></div>
+      </div>
+      <div class="upload-row" id="row-parsing">
+        <span class="upload-row-label">PARSING DATA</span>
+        <div class="flap-group pct" id="pct-parsing"></div>
+      </div>
+      <div class="upload-modal-message" id="modal-message"></div>
+      <button class="modal-continue-btn" id="modal-continue" type="button" disabled>CONTINUE</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
 <script>
 const ALPHABET = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/%-";
 
@@ -255,6 +372,7 @@ const SIZES = {
   hero:  { w:40, h:56, fs:34 },
   sub:   { w:24, h:36, fs:20 },
   table: { w:22, h:32, fs:18 },
+  pct:   { w:22, h:33, fs:20 },
 };
 
 function buildFlapCell(size){
@@ -291,6 +409,26 @@ function buildFlapCell(size){
   return flap;
 }
 
+// CSS transitions can occasionally fail to fire `transitionend` (a style
+// recalc racing the class toggle, or the browser deciding to skip it) — since
+// every flip step waits on that event, one dropped event stalls that flap's
+// promise forever, and since reveals use Promise.all, one stuck cell blocks
+// the entire board (or, for the modal, an entire progress readout)
+// indefinitely. A fallback timer guarantees the flip always completes.
+function onFlipEnd(inner, callback){
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    inner.removeEventListener('transitionend', onTransitionEnd);
+    clearTimeout(fallback);
+    callback();
+  };
+  const onTransitionEnd = () => finish();
+  inner.addEventListener('transitionend', onTransitionEnd, { once:true });
+  const fallback = setTimeout(finish, 160);
+}
+
 function spinFlap(flap, targetChar, opts={}){
   const idx = ALPHABET.indexOf(targetChar);
   const steps = opts.steps ?? (8 + Math.floor(Math.random()*7));
@@ -315,8 +453,7 @@ function spinFlap(flap, targetChar, opts={}){
       flap._back.textContent = nextChar;
       flap._inner.classList.add('flip');
 
-      const onEnd = () => {
-        flap._inner.removeEventListener('transitionend', onEnd);
+      onFlipEnd(flap._inner, () => {
         flap._inner.style.transition = 'none';
         flap._inner.classList.remove('flip');
         flap._front.textContent = nextChar;
@@ -326,8 +463,7 @@ function spinFlap(flap, targetChar, opts={}){
         const remaining = sequence.length - i;
         const delay = remaining < 3 ? baseDelay * 1.8 : baseDelay;
         setTimeout(step, delay);
-      };
-      flap._inner.addEventListener('transitionend', onEnd, { once:true });
+      });
     }
     step();
   });
@@ -362,6 +498,52 @@ async function revealGroup(group, text, opts={}){
 
 function pad(str, width){
   return str.toUpperCase().padEnd(width, ' ').slice(0, width);
+}
+
+// Single-step flip used for rapidly-ticking counters (the modal's percent
+// readouts), as opposed to spinFlap's multi-step spin used for the board reveal.
+// Guards against overlapping calls: if a flip is already in flight when a new
+// target character arrives, the in-flight flip's back face is updated in place
+// and a follow-up flip is queued rather than starting a second, colliding
+// transition on the same cell (which otherwise showed corrupted digits).
+function setFlapChar(flap, ch){
+  if (flap._pendingChar === ch || (!flap._flipping && flap._front.textContent === ch)) return;
+  flap._pendingChar = ch;
+  if (flap._flipping){
+    flap._back.textContent = ch;
+    return;
+  }
+  flap._flipping = true;
+  flap._back.textContent = ch;
+  flap._inner.classList.add('flip');
+  onFlipEnd(flap._inner, () => {
+    flap._inner.style.transition = 'none';
+    flap._inner.classList.remove('flip');
+    flap._front.textContent = flap._back.textContent;
+    void flap._inner.offsetWidth;
+    flap._inner.style.transition = '';
+    flap._flipping = false;
+    const next = flap._pendingChar;
+    flap._pendingChar = null;
+    if (next !== null && next !== flap._front.textContent) setFlapChar(flap, next);
+  });
+}
+
+function pctText(n){
+  const clamped = Math.max(0, Math.min(100, Math.round(n)));
+  return String(clamped).padStart(3, ' ') + '%';
+}
+
+// Sets the readout directly (each changed digit still flips via setFlapChar).
+// Deliberately NOT animated with requestAnimationFrame: rAF is throttled or
+// fully suspended on a backgrounded tab, and this function is called from
+// inside the upload/verify/parse pipeline — if progress display were awaited
+// on an rAF loop, switching tabs mid-upload would hang the whole pipeline,
+// not just the visual. The pipeline's real progress must never wait on how
+// the browser feels like scheduling paint.
+function setGroupPercent(group, n){
+  const text = pctText(n);
+  group._cells.forEach((cell, i) => setFlapChar(cell, text[i]));
 }
 
 const STATUS_COLOR = {
@@ -456,6 +638,321 @@ async function resetBoard(){
 document.getElementById('replay').addEventListener('click', resetBoard);
 document.getElementById('upload').addEventListener('click', () => {
   document.getElementById('upload-input').click();
+});
+
+// ---- Upload modal: read -> verify -> parse -> refresh board ----
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+function readFileWithProgress(file, onProgress){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onprogress = (e) => { if (e.lengthComputable) onProgress((e.loaded / e.total) * 100); };
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(reader.result);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseMazeReport(fullText){
+  // OCR frequently misreads a capital "I" standing alone as a pipe character
+  // ("I found the dashboard..." -> "| found the dashboard..."), which would
+  // otherwise silently break the exact-phrase question matches below.
+  const norm = fullText.replace(/\r/g, '').replace(/(^|\s)\|(?=\s)/g, '$1I');
+  const result = { responses:null, blocks:null, metrics:[], scales:{}, openTotal:0, openAnswered:0 };
+
+  // The KPI header reads (OCR'd) as "Responses # of blocks ... 2 15 ... See
+  // online report" — both label words land together, then both values land
+  // together further along, before the "See online report" button text.
+  const headerIdx = norm.search(/Responses[\s\S]{0,40}?#?\s*of\s*blocks/i);
+  if (headerIdx !== -1){
+    let windowText = norm.slice(headerIdx, headerIdx + 300);
+    const boundary = windowText.search(/see online report/i);
+    if (boundary !== -1) windowText = windowText.slice(0, boundary);
+    const nums = (windowText.match(/\b\d{1,4}\b/g) || []).map(n => parseInt(n, 10));
+    if (nums.length >= 1) result.responses = nums[0];
+    if (nums.length >= 2) result.blocks = nums[1];
+  }
+
+  const metricRowRe = /(\d{1,2})\s*[·.\-]\s*([A-Za-z][A-Za-z ,/&-]+?)\s+(\d{1,3})%/g;
+  let m;
+  while ((m = metricRowRe.exec(norm))){
+    result.metrics.push({ rank:+m[1], label:m[2].trim(), pct:+m[3] });
+  }
+
+  // Each opinion-scale question renders as five percentage buckets (1..5) in
+  // order. OCR reads those cleanly even where the selected bucket is
+  // highlighted, so the weighted average of the five buckets is a more
+  // reliable signal than trying to match the "Average" stat card's own
+  // number, which OCR reads out of order relative to its label.
+  const scaleQuestions = [
+    { key:'SETUP_EASE',      re:/how easy or difficult was it to set up the dashboard\?/i },
+    { key:'USE_FREQUENTLY',  re:/i think i would use this dashboard frequently\./i },
+    { key:'FOUND_COMPLEX',   re:/i found the dashboard unnecessarily complex\./i },
+    { key:'TRUST_DECISIONS', re:/i would trust this dashboard to inform decisions i make at work\./i },
+  ];
+  for (const q of scaleQuestions){
+    const idx = norm.search(q.re);
+    if (idx === -1) continue;
+    const windowText = norm.slice(idx, idx + 400);
+    const pctMatches = [...windowText.matchAll(/(\d{1,3})%/g)].slice(0, 5).map(mm => +mm[1]);
+    if (pctMatches.length === 5){
+      const weighted = pctMatches.reduce((sum, pct, i) => sum + (i + 1) * pct, 0) / 100;
+      result.scales[q.key] = Math.round(weighted * 10) / 10;
+    }
+  }
+
+  const openBlocks = norm.split(/Open Question/i).slice(1);
+  result.openTotal = openBlocks.length;
+  result.openAnswered = openBlocks.filter(b => !/No data to display yet/i.test(b.slice(0, 300))).length;
+
+  return result;
+}
+
+function buildDataFromParsed(parsed){
+  const total = parsed.responses ?? 2;
+
+  const findMetric = (label) => {
+    const found = parsed.metrics.find(mm => mm.label.toLowerCase().startsWith(label.toLowerCase()));
+    return found ? found.pct : null;
+  };
+  const votesFor = (pct) => `${Math.round((pct / 100) * total)}/${total}`;
+  const statusForPct = (pct) => pct == null ? 'CANCELLED' : pct >= 90 ? 'ON TIME' : pct >= 40 ? 'BOARDING' : 'DELAYED';
+  const statusForScale = (v) => v == null ? 'CANCELLED' : v >= 4 ? 'ON TIME' : v >= 3 ? 'BOARDING' : 'DELAYED';
+  const statusForComplexity = (v) => v == null ? 'CANCELLED' : v <= 2 ? 'ON TIME' : v <= 3 ? 'BOARDING' : 'DELAYED';
+
+  const onTime   = findMetric('on-time completion');
+  const cycle    = findMetric('cycle time by stage');
+  const residual = findMetric('residual risk trend');
+  const setupEase = parsed.scales.SETUP_EASE ?? null;
+  const useFreq    = parsed.scales.USE_FREQUENTLY ?? null;
+  const trust      = parsed.scales.TRUST_DECISIONS ?? null;
+  const complex    = parsed.scales.FOUND_COMPLEX ?? null;
+  const openStatus = parsed.openTotal === 0 || parsed.openAnswered === 0
+    ? 'CANCELLED'
+    : (parsed.openAnswered < parsed.openTotal ? 'BOARDING' : 'ON TIME');
+
+  return [
+    { metric:'ON-TIME COMPLETION',     votes: onTime!=null ? votesFor(onTime) : `0/${total}`,     score: onTime!=null ? `${onTime}%` : '--',     status: statusForPct(onTime) },
+    { metric:'CYCLE TIME BY STAGE',    votes: cycle!=null ? votesFor(cycle) : `0/${total}`,       score: cycle!=null ? `${cycle}%` : '--',       status: statusForPct(cycle) },
+    { metric:'RESIDUAL RISK TREND',    votes: residual!=null ? votesFor(residual) : `0/${total}`, score: residual!=null ? `${residual}%` : '--', status: statusForPct(residual) },
+    { metric:'SETUP EASE',             votes: setupEase!=null ? '1/1' : '0/0', score: setupEase!=null ? `${setupEase}/5` : '--', status: statusForScale(setupEase) },
+    { metric:'USE FREQUENTLY',         votes: useFreq!=null ? '1/1' : '0/0',   score: useFreq!=null ? `${useFreq}/5` : '--',     status: statusForScale(useFreq) },
+    { metric:'TRUST FOR DECISIONS',    votes: trust!=null ? '1/1' : '0/0',     score: trust!=null ? `${trust}/5` : '--',         status: statusForScale(trust) },
+    { metric:'FOUND COMPLEX',          votes: complex!=null ? '1/1' : '0/0',   score: complex!=null ? `${complex}/5` : '--',     status: statusForComplexity(complex) },
+    { metric:'OPEN INSIGHTS CAPTURED', votes: `${parsed.openAnswered}/${parsed.openTotal}`, score: `${parsed.openAnswered}/${parsed.openTotal}`, status: openStatus },
+  ];
+}
+
+const modalOverlay = document.getElementById('modal-overlay');
+const modalCloseBtn = document.getElementById('modal-close');
+const modalContinueBtn = document.getElementById('modal-continue');
+const modalMessageEl = document.getElementById('modal-message');
+const uploadInput = document.getElementById('upload-input');
+
+const pctGroups = {
+  uploading: buildFlapGroup('  0%', 'pct'),
+  verifying: buildFlapGroup('  0%', 'pct'),
+  parsing:   buildFlapGroup('  0%', 'pct'),
+};
+document.getElementById('pct-uploading').appendChild(pctGroups.uploading);
+document.getElementById('pct-verifying').appendChild(pctGroups.verifying);
+document.getElementById('pct-parsing').appendChild(pctGroups.parsing);
+
+const modalRowEls = {
+  uploading: document.getElementById('row-uploading'),
+  verifying: document.getElementById('row-verifying'),
+  parsing:   document.getElementById('row-parsing'),
+};
+
+let uploadToken = 0;
+let pendingUpdate = null;
+let activeWorker = null;
+
+// Maze exports these reports as fully rendered page images with no real text
+// layer (confirmed empirically: pdf.js returns zero text items on every page
+// of a real export), so text can only be recovered by rendering each page to
+// a canvas and running OCR over the pixels.
+//
+// The report's highlighted rows/cells (selected metrics, the selected opinion
+// score) sit on a saturated teal/green fill rather than plain white, and
+// Tesseract's default binarization loses the text there entirely. The actual
+// text is near-black on every fill color used in this template, so a plain
+// luminance threshold (independent of hue) recovers it reliably.
+function binarize(canvas, threshold){
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4){
+    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const v = gray < threshold ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+async function renderPageToCanvas(pdf, pageNum, scale){
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return binarize(canvas, 100);
+}
+
+async function ocrPage(worker, pdf, pageNum, scale){
+  const canvas = await renderPageToCanvas(pdf, pageNum, scale);
+  const { data } = await worker.recognize(canvas);
+  return data.text || '';
+}
+
+function setRowState(stage, state){
+  const el = modalRowEls[stage];
+  el.classList.remove('active', 'done', 'error');
+  if (state) el.classList.add(state);
+}
+
+function resetModalState(){
+  ['uploading', 'verifying', 'parsing'].forEach(stage => {
+    setGroupPercent(pctGroups[stage], 0);
+    setRowState(stage, null);
+    pctGroups[stage].classList.remove('pct-error');
+  });
+  modalMessageEl.textContent = '';
+  modalContinueBtn.disabled = true;
+  pendingUpdate = null;
+}
+
+function openModal(){ modalOverlay.classList.add('open'); }
+function closeModal(){
+  modalOverlay.classList.remove('open');
+  uploadInput.value = '';
+  uploadToken++; // invalidate any pipeline still in flight
+  if (activeWorker){
+    activeWorker.terminate();
+    activeWorker = null;
+  }
+}
+
+function failModal(stage, message, token){
+  if (token !== uploadToken) return;
+  setRowState(stage, 'error');
+  pctGroups[stage].classList.add('pct-error');
+  modalMessageEl.textContent = message;
+}
+
+async function handleFileSelected(file){
+  const token = ++uploadToken;
+  resetModalState();
+  openModal();
+  setRowState('uploading', 'active');
+
+  let arrayBuffer;
+  try {
+    arrayBuffer = await readFileWithProgress(file, pct => {
+      if (token !== uploadToken) return;
+      setGroupPercent(pctGroups.uploading, pct);
+    });
+  } catch (err) {
+    failModal('uploading', 'Could not read the selected file.', token);
+    return;
+  }
+  if (token !== uploadToken) return;
+  setGroupPercent(pctGroups.uploading, 100);
+  setRowState('uploading', 'done');
+
+  setRowState('verifying', 'active');
+  let pdf;
+  try {
+    pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  } catch (err) {
+    failModal('verifying', "This doesn't look like a valid PDF file.", token);
+    return;
+  }
+  if (token !== uploadToken) return;
+
+  let worker;
+  try {
+    worker = await Tesseract.createWorker('eng');
+    activeWorker = worker;
+  } catch (err) {
+    failModal('verifying', "Couldn't start the OCR engine. Check your connection and try again.", token);
+    return;
+  }
+  if (token !== uploadToken){ worker.terminate(); return; }
+  setGroupPercent(pctGroups.verifying, 15); // OCR engine warmed up
+
+  const OCR_SCALE = 2;
+  let page1Text;
+  try {
+    page1Text = await ocrPage(worker, pdf, 1, OCR_SCALE);
+  } catch (err) {
+    failModal('verifying', 'Could not read the PDF pages.', token);
+    worker.terminate(); activeWorker = null;
+    return;
+  }
+  if (token !== uploadToken){ worker.terminate(); return; }
+  setGroupPercent(pctGroups.verifying, 100);
+
+  const looksLikeMazeReport = /maze/i.test(page1Text) &&
+    (/responses/i.test(page1Text) || /#?\s*of blocks/i.test(page1Text));
+
+  if (!looksLikeMazeReport){
+    failModal('verifying', "This doesn't look like a MAZE report PDF.", token);
+    worker.terminate(); activeWorker = null;
+    return;
+  }
+  setRowState('verifying', 'done');
+
+  setRowState('parsing', 'active');
+  let fullText = page1Text + '\n';
+  for (let p = 2; p <= pdf.numPages; p++){
+    if (token !== uploadToken){ worker.terminate(); return; }
+    try {
+      fullText += (await ocrPage(worker, pdf, p, OCR_SCALE)) + '\n';
+    } catch (err) {
+      // Skip a page OCR couldn't read rather than failing the whole parse.
+    }
+    setGroupPercent(pctGroups.parsing, ((p - 1) / (pdf.numPages - 1)) * 100);
+  }
+
+  worker.terminate();
+  activeWorker = null;
+  if (token !== uploadToken) return;
+
+  const parsed = parseMazeReport(fullText);
+  const newRows = buildDataFromParsed(parsed);
+  setGroupPercent(pctGroups.parsing, 100);
+  setRowState('parsing', 'done');
+
+  pendingUpdate = { rows:newRows, responses:parsed.responses };
+  modalContinueBtn.disabled = false;
+}
+
+function applyNewData(update){
+  update.rows.forEach((row, i) => { DATA[i] = row; });
+  if (update.responses != null){
+    document.querySelector('.nameplate > span').textContent =
+      `MODEL SF·24  ·  SOURCE: MAZE REPORT  ·  N = ${update.responses} RESPONDENTS`;
+  }
+  resetBoard();
+}
+
+uploadInput.addEventListener('change', () => {
+  const file = uploadInput.files && uploadInput.files[0];
+  if (file) handleFileSelected(file);
+});
+modalCloseBtn.addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal();
+});
+modalContinueBtn.addEventListener('click', () => {
+  if (pendingUpdate) applyNewData(pendingUpdate);
+  closeModal();
 });
 
 runSequence();

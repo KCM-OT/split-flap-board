@@ -116,6 +116,9 @@
   .flap-group{ display:flex; gap:2px; }
   .flap-group.status .face{ font-weight:800; }
 
+  .status-cell{ display:flex; align-items:center; gap:8px; }
+  .status-chip .face{ border-radius:2px; }
+
   .flap{
     position:relative;
     perspective:240px;
@@ -308,7 +311,7 @@
 
 <div class="stage">
   <div class="board-frame"
-       style="--w-metric:576px; --w-votes:78px; --w-score:104px; --w-status:234px;">
+       style="--w-metric:576px; --w-votes:78px; --w-score:104px; --w-status:260px;">
 
     <div class="hero-wrap" id="hero"></div>
 
@@ -373,6 +376,7 @@ const SIZES = {
   sub:   { w:24, h:36, fs:20 },
   table: { w:22, h:32, fs:18 },
   pct:   { w:22, h:33, fs:20 },
+  chip:  { w:18, h:32, fs:18 },
 };
 
 function buildFlapCell(size){
@@ -553,6 +557,35 @@ const STATUS_COLOR = {
   'CANCELLED':'color-grey',
 };
 
+// Solid-color indicator chip appended after each row's STATUS text — a flap
+// cell like the others, except its face is a flat fill instead of a letter.
+const STATUS_CHIP_COLOR = {
+  'ON TIME':'#028A02',
+  'BOARDING':'#1470A9',
+  'DELAYED':'#DA7C01',
+  'CANCELLED':'#B30000',
+};
+
+function buildStatusChip(){
+  const chip = buildFlapCell(SIZES.chip);
+  chip.classList.add('status-chip');
+  return chip;
+}
+
+function setFlapColor(flap, color){
+  if (flap._targetColor === color) return;
+  flap._targetColor = color;
+  flap._back.style.backgroundColor = color;
+  flap._inner.classList.add('flip');
+  onFlipEnd(flap._inner, () => {
+    flap._inner.style.transition = 'none';
+    flap._inner.classList.remove('flip');
+    flap._front.style.backgroundColor = color;
+    void flap._inner.offsetWidth;
+    flap._inner.style.transition = '';
+  });
+}
+
 const DATA = [
   { metric:'ON-TIME COMPLETION',      votes:'2/2', score:'100%', status:'ON TIME'   },
   { metric:'CYCLE TIME BY STAGE',     votes:'1/2', score:'50%',  status:'BOARDING'  },
@@ -599,14 +632,20 @@ const rowEls = DATA.map(d => {
   const votesGroup  = buildFlapGroup(pad(d.votes, W_VOTES), 'table', 'votes');
   const scoreGroup  = buildFlapGroup(pad(d.score, W_SCORE), 'table', 'score');
   const statusGroup = buildFlapGroup(pad(d.status, W_STATUS), 'table', 'status ' + (STATUS_COLOR[d.status] || ''));
+  const chip = buildStatusChip();
+
+  const statusCell = document.createElement('div');
+  statusCell.className = 'status-cell';
+  statusCell.appendChild(statusGroup);
+  statusCell.appendChild(chip);
 
   row.appendChild(metricGroup);
   row.appendChild(votesGroup);
   row.appendChild(scoreGroup);
-  row.appendChild(statusGroup);
+  row.appendChild(statusCell);
 
   rowsEl.appendChild(row);
-  return { row, groups: { metricGroup, votesGroup, scoreGroup, statusGroup } };
+  return { row, chip, groups: { metricGroup, votesGroup, scoreGroup, statusGroup } };
 });
 
 async function runSequence(){
@@ -616,13 +655,14 @@ async function runSequence(){
   await new Promise(r => setTimeout(r, 200));
 
   for (let i = 0; i < DATA.length; i++){
-    const { row, groups } = rowEls[i];
+    const { row, chip, groups } = rowEls[i];
     const d = DATA[i];
     row.classList.add('visible');
     await new Promise(r => setTimeout(r, 90));
     revealGroup(groups.metricGroup, pad(d.metric, W_METRIC), { stagger:12, baseDelay:34 });
     revealGroup(groups.votesGroup,  pad(d.votes, W_VOTES),  { stagger:12, baseDelay:34 });
     revealGroup(groups.scoreGroup,  pad(d.score, W_SCORE),  { stagger:12, baseDelay:34 });
+    setFlapColor(chip, STATUS_CHIP_COLOR[d.status] || '#7d8590');
     await revealGroup(groups.statusGroup, pad(d.status, W_STATUS), { stagger:12, baseDelay:34 });
     await new Promise(r => setTimeout(r, 160));
   }
@@ -645,6 +685,11 @@ async function resetBoard(){
   rowEls.forEach(({row}) => row.classList.remove('visible'));
   [heroGroup, subGroup, ...rowEls.flatMap(r => Object.values(r.groups))].forEach(g => {
     g._cells.forEach(c => { c._front.textContent = ' '; });
+  });
+  rowEls.forEach(({chip}) => {
+    chip._targetColor = null;
+    chip._front.style.backgroundColor = '';
+    chip._back.style.backgroundColor = '';
   });
   await new Promise(r => setTimeout(r, 250));
   runSequence();

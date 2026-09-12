@@ -570,11 +570,26 @@ const heroEl = document.getElementById('hero');
 const subEl = document.getElementById('sub');
 const rowsEl = document.getElementById('rows');
 
-const heroGroup = buildFlapGroup('PRIVACY KPI CARDS', 'hero');
+// The hero title comes from the uploaded report itself (see parseMazeReport's
+// title extraction) and defaults to this project's own report until a file
+// is uploaded. The sub-title is fixed — it names the board, not the report.
+let HERO_TITLE = 'PRIVACY KPI CARDS';
+const SUB_TITLE = 'MAZE STUDY';
+
+let heroGroup = buildFlapGroup(HERO_TITLE, 'hero');
 heroEl.appendChild(heroGroup);
 
-const subGroup = buildFlapGroup('USEFULNESS STUDY', 'sub');
+const subGroup = buildFlapGroup(SUB_TITLE, 'sub');
 subEl.appendChild(subGroup);
+
+// Rebuilds the hero's flap cells to match a new title's length, so the
+// title stays tightly centered (no trailing blank cells) regardless of how
+// long the uploaded report's own title is.
+function rebuildHeroGroup(text){
+  heroEl.innerHTML = '';
+  heroGroup = buildFlapGroup(' '.repeat(text.length), 'hero');
+  heroEl.appendChild(heroGroup);
+}
 
 const rowEls = DATA.map(d => {
   const row = document.createElement('div');
@@ -595,9 +610,9 @@ const rowEls = DATA.map(d => {
 });
 
 async function runSequence(){
-  await revealGroup(heroGroup, 'PRIVACY KPI CARDS', { stagger:26, baseDelay:60 });
+  await revealGroup(heroGroup, HERO_TITLE, { stagger:26, baseDelay:60 });
   await new Promise(r => setTimeout(r, 150));
-  await revealGroup(subGroup, 'USEFULNESS STUDY', { stagger:18, baseDelay:50 });
+  await revealGroup(subGroup, SUB_TITLE, { stagger:18, baseDelay:50 });
   await new Promise(r => setTimeout(r, 200));
 
   for (let i = 0; i < DATA.length; i++){
@@ -660,7 +675,24 @@ function parseMazeReport(fullText){
   // ("I found the dashboard..." -> "| found the dashboard..."), which would
   // otherwise silently break the exact-phrase question matches below.
   const norm = fullText.replace(/\r/g, '').replace(/(^|\s)\|(?=\s)/g, '$1I');
-  const result = { responses:null, blocks:null, metrics:[], scales:{}, openTotal:0, openAnswered:0 };
+  const result = { title:null, responses:null, blocks:null, metrics:[], scales:{}, openTotal:0, openAnswered:0 };
+
+  // The report's own title (e.g. "Privacy KPI Cards") sits on its own line
+  // right after the "Maze version - <study type>" line. It's title-cased —
+  // each word is either ALL CAPS (an acronym like "KPI") or Capitalized —
+  // whereas the decorative background artwork next to it OCRs as lowercase
+  // noise words, so keeping only the leading run of title-cased words drops
+  // that noise instead of appending it to the title.
+  const titleLineMatch = norm.match(/Maze version\s*-\s*[^\n]*\n+([^\n]+)/i);
+  if (titleLineMatch){
+    const words = titleLineMatch[1].trim().split(/\s+/);
+    const kept = [];
+    for (const w of words){
+      if (/^[A-Z]+$/.test(w) || /^[A-Z][a-z]+$/.test(w)) kept.push(w);
+      else break;
+    }
+    if (kept.length) result.title = kept.join(' ').toUpperCase();
+  }
 
   // The KPI header reads (OCR'd) as "Responses # of blocks ... 2 15 ... See
   // online report" — both label words land together, then both values land
@@ -928,7 +960,7 @@ async function handleFileSelected(file){
   setGroupPercent(pctGroups.parsing, 100);
   setRowState('parsing', 'done');
 
-  pendingUpdate = { rows:newRows, responses:parsed.responses };
+  pendingUpdate = { rows:newRows, responses:parsed.responses, title:parsed.title };
   modalContinueBtn.disabled = false;
 }
 
@@ -937,6 +969,10 @@ function applyNewData(update){
   if (update.responses != null){
     document.querySelector('.nameplate > span').textContent =
       `MODEL SF·24  ·  SOURCE: MAZE REPORT  ·  N = ${update.responses} RESPONDENTS`;
+  }
+  if (update.title){
+    HERO_TITLE = update.title;
+    rebuildHeroGroup(HERO_TITLE);
   }
   resetBoard();
 }

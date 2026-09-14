@@ -749,7 +749,7 @@ function parseMazeReport(fullText){
   // ("I found the dashboard..." -> "| found the dashboard..."), which would
   // otherwise silently break the exact-phrase question matches below.
   const norm = fullText.replace(/\r/g, '').replace(/(^|\s)\|(?=\s)/g, '$1I');
-  const result = { title:null, responses:null, blocks:null, metrics:[], scales:{}, openTotal:0, openAnswered:0 };
+  const result = { title:null, responses:null, blocks:null, metrics:[], scaleResults:[], openTotal:0, openAnswered:0 };
 
   // The report's own title (e.g. "Privacy KPI Cards") sits on its own line
   // right after the "Maze version - <study type>" line. Its words are either
@@ -799,26 +799,33 @@ function parseMazeReport(fullText){
     result.metrics.push({ rank:+m[1], label:m[2].trim(), pct:+m[3] });
   }
 
-  // Each opinion-scale question renders as five percentage buckets (1..5) in
-  // order. OCR reads those cleanly even where the selected bucket is
-  // highlighted, so the weighted average of the five buckets is a more
-  // reliable signal than trying to match the "Average" stat card's own
-  // number, which OCR reads out of order relative to its label.
-  const scaleQuestions = [
-    { key:'SETUP_EASE',      re:/how easy or difficult was it to set up the dashboard\?/i },
-    { key:'USE_FREQUENTLY',  re:/i think i would use this dashboard frequently\./i },
-    { key:'FOUND_COMPLEX',   re:/i found the dashboard unnecessarily complex\./i },
-    { key:'TRUST_DECISIONS', re:/i would trust this dashboard to inform decisions i make at work\./i },
-  ];
-  for (const q of scaleQuestions){
-    const idx = norm.search(q.re);
-    if (idx === -1) continue;
-    const windowText = norm.slice(idx, idx + 400);
-    const pctMatches = [...windowText.matchAll(/(\d{1,3})%/g)].slice(0, 5).map(mm => +mm[1]);
-    if (pctMatches.length === 5){
-      const weighted = pctMatches.reduce((sum, pct, i) => sum + (i + 1) * pct, 0) / 100;
-      result.scales[q.key] = Math.round(weighted * 10) / 10;
-    }
+  // Dynamically detect every Likert/scale question in the report by finding
+  // clusters of exactly 5 percentage values that sum to ~100% (the signature
+  // of a 1–5 opinion-scale bucket distribution).  For each cluster the question
+  // text is taken from the nearest sentence-like line in the preceding 600 chars.
+  // This works for any Maze report regardless of which specific questions were asked.
+  const fivePctRe = /(\d{1,3})%\s+(\d{1,3})%\s+(\d{1,3})%\s+(\d{1,3})%\s+(\d{1,3})%/g;
+  const usedPctIdx = [];
+  let pm;
+  while ((pm = fivePctRe.exec(norm)) !== null){
+    const vals = [+pm[1], +pm[2], +pm[3], +pm[4], +pm[5]];
+    const sum = vals.reduce((a,b) => a+b, 0);
+    if (sum < 75 || sum > 125) continue; // not a scale distribution
+    if (usedPctIdx.some(ui => Math.abs(ui - pm.index) < 250)) continue; // dedup
+    usedPctIdx.push(pm.index);
+    const lookback = norm.slice(Math.max(0, pm.index - 600), pm.index);
+    const lines = lookback.split('\n').map(l => l.trim()).filter(l => l.length > 15);
+    // Prefer the most-recent line that reads as a question or statement sentence
+    const qLine = [...lines].reverse().find(l =>
+      /[?.!]$/.test(l) || /^[A-Z][a-z]/.test(l) || /^I\s/i.test(l)
+    ) || lines[lines.length - 1] || '';
+    if (!qLine) continue;
+    const weighted = vals.reduce((s,v,i) => s + (i+1)*v, 0) / 100;
+    result.scaleResults.push({
+      label: qLine,
+      score: Math.round(weighted * 10) / 10,
+      buckets: vals,
+    });
   }
 
   const openBlocks = norm.split(/Open Question/i).slice(1);
@@ -831,36 +838,82 @@ function parseMazeReport(fullText){
 function buildDataFromParsed(parsed){
   const total = parsed.responses ?? 2;
 
-  const findMetric = (label) => {
-    const found = parsed.metrics.find(mm => mm.label.toLowerCase().startsWith(label.toLowerCase()));
-    return found ? found.pct : null;
-  };
-  const votesFor = (pct) => `${Math.round((pct / 100) * total)}/${total}`;
-  const statusForPct = (pct) => pct == null ? 'CANCELLED' : pct >= 90 ? 'ON TIME' : pct >= 40 ? 'BOARDING' : 'DELAYED';
-  const statusForScale = (v) => v == null ? 'CANCELLED' : v >= 4 ? 'ON TIME' : v >= 3 ? 'BOARDING' : 'DELAYED';
-  const statusForComplexity = (v) => v == null ? 'CANCELLED' : v <= 2 ? 'ON TIME' : v <= 3 ? 'BOARDING' : 'DELAYED';
+  // Strip grammatical/filler words to generate concise board labels from
+  // long question sentences (e.g. "I found the dashboard unnecessarily complex." → "FOUND DASHBOARD COMPLEX")
+  const STOP = new Set(['a','an','the','is','are','was','were','be','been','have','has',
+    'do','does','did','will','would','shall','should','may','might','can','could',
+    'i','me','my','we','our','you','your','it','its','this','that','these','those',
+    'to','for','of','in','on','at','by','with','from','or','and','but','not',
+    'how','what','when','where','who','which','why','up','make','us','am','also']);
+  function shortLabel(text){
+    const words = text.replace(/[?.!'"]/g,'').split(/\s+/);
+    const sig = words.filter(w => !STOP.has(w.toLowerCase()) && /^[A-Za-z]{2,}$/.test(w));
+    return sig.join(' ').toUpperCase().slice(0, 22);
+  }
 
-  const onTime   = findMetric('on-time completion');
-  const cycle    = findMetric('cycle time by stage');
-  const residual = findMetric('residual risk trend');
-  const setupEase = parsed.scales.SETUP_EASE ?? null;
-  const useFreq    = parsed.scales.USE_FREQUENTLY ?? null;
-  const trust      = parsed.scales.TRUST_DECISIONS ?? null;
-  const complex    = parsed.scales.FOUND_COMPLEX ?? null;
-  const openStatus = parsed.openTotal === 0 || parsed.openAnswered === 0
-    ? 'CANCELLED'
-    : (parsed.openAnswered < parsed.openTotal ? 'BOARDING' : 'ON TIME');
+  const candidates = [];
+  const votesFor = (pct) => `${Math.round((pct/100)*total)}/${total}`;
+  const statusForPct   = (pct) => pct >= 90 ? 'ON TIME' : pct >= 40 ? 'BOARDING' : 'DELAYED';
+  const statusForScale = (v)   => v >= 4    ? 'ON TIME' : v >= 3    ? 'BOARDING' : 'DELAYED';
+  const statusForNeg   = (v)   => v <= 2    ? 'ON TIME' : v <= 3    ? 'BOARDING' : 'DELAYED';
 
-  return [
-    { metric:'ON-TIME COMPLETION',     votes: onTime!=null ? votesFor(onTime) : `0/${total}`,     score: onTime!=null ? `${onTime}%` : '--',     status: statusForPct(onTime) },
-    { metric:'CYCLE TIME BY STAGE',    votes: cycle!=null ? votesFor(cycle) : `0/${total}`,       score: cycle!=null ? `${cycle}%` : '--',       status: statusForPct(cycle) },
-    { metric:'RESIDUAL RISK TREND',    votes: residual!=null ? votesFor(residual) : `0/${total}`, score: residual!=null ? `${residual}%` : '--', status: statusForPct(residual) },
-    { metric:'SETUP EASE',             votes: setupEase!=null ? '1/1' : '0/0', score: setupEase!=null ? `${setupEase}/5` : '--', status: statusForScale(setupEase) },
-    { metric:'USE FREQUENTLY',         votes: useFreq!=null ? '1/1' : '0/0',   score: useFreq!=null ? `${useFreq}/5` : '--',     status: statusForScale(useFreq) },
-    { metric:'TRUST FOR DECISIONS',    votes: trust!=null ? '1/1' : '0/0',     score: trust!=null ? `${trust}/5` : '--',         status: statusForScale(trust) },
-    { metric:'FOUND COMPLEX',          votes: complex!=null ? '1/1' : '0/0',   score: complex!=null ? `${complex}/5` : '--',     status: statusForComplexity(complex) },
-    { metric:'OPEN INSIGHTS CAPTURED', votes: `${parsed.openAnswered}/${parsed.openTotal}`, score: `${parsed.openAnswered}/${parsed.openTotal}`, status: openStatus },
-  ];
+  // Task-completion metrics (numbered rows with a percentage, e.g. "1. On-time completion 83%")
+  for (const m of parsed.metrics){
+    candidates.push({
+      type:'task', completeness: m.pct,
+      metric: m.label.toUpperCase().slice(0, 22),
+      votes: votesFor(m.pct),
+      score: `${m.pct}%`,
+      status: statusForPct(m.pct),
+    });
+  }
+
+  // Likert / opinion-scale questions (dynamically detected — any question type)
+  for (const sq of (parsed.scaleResults || [])){
+    const label = shortLabel(sq.label);
+    if (!label) continue;
+    // "Negative" framing questions (complexity, difficulty, confusion) score
+    // inversely — a low scale score means the dashboard IS easy / non-complex.
+    const isNegative = /complex|difficult|confus|frustrat/i.test(sq.label);
+    candidates.push({
+      type:'scale', completeness: Math.abs(sq.score - 3.0), // extremity from neutral
+      metric: label,
+      votes: '1/1',
+      score: `${sq.score}/5`,
+      status: isNegative ? statusForNeg(sq.score) : statusForScale(sq.score),
+    });
+  }
+
+  // Open-question summary (one aggregate row)
+  if (parsed.openTotal > 0){
+    const openStatus = parsed.openAnswered === 0 ? 'CANCELLED'
+      : parsed.openAnswered < parsed.openTotal ? 'BOARDING' : 'ON TIME';
+    candidates.push({
+      type:'open', completeness: parsed.openAnswered / Math.max(1, parsed.openTotal),
+      metric: 'OPEN INSIGHTS',
+      votes: `${parsed.openAnswered}/${parsed.openTotal}`,
+      score: `${parsed.openAnswered}/${parsed.openTotal}`,
+      status: openStatus,
+    });
+  }
+
+  // Rank: task metrics first (by completion %), then scale questions (by how
+  // decisive/extreme the score is), then open questions — so the board always
+  // leads with the most data-rich and visually interesting statistics.
+  const typePriority = { task:0, scale:1, open:2 };
+  candidates.sort((a,b) =>
+    typePriority[a.type] !== typePriority[b.type]
+      ? typePriority[a.type] - typePriority[b.type]
+      : b.completeness - a.completeness
+  );
+
+  // Exactly 8 rows — pad with blank CANCELLED rows if the report had fewer
+  const top8 = candidates.slice(0, 8);
+  while (top8.length < 8){
+    top8.push({ metric:'--', votes:'--', score:'--', status:'CANCELLED' });
+  }
+
+  return top8.map(({ metric, votes, score, status }) => ({ metric, votes, score, status }));
 }
 
 const modalOverlay = document.getElementById('modal-overlay');

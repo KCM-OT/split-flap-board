@@ -572,17 +572,47 @@ function buildStatusChip(){
   return chip;
 }
 
-function setFlapColor(flap, color){
-  if (flap._targetColor === color) return;
-  flap._targetColor = color;
-  flap._back.style.backgroundColor = color;
-  flap._inner.classList.add('flip');
-  onFlipEnd(flap._inner, () => {
-    flap._inner.style.transition = 'none';
-    flap._inner.classList.remove('flip');
-    flap._front.style.backgroundColor = color;
-    void flap._inner.offsetWidth;
-    flap._inner.style.transition = '';
+// The full set of colors the chip cycles through — same order every time,
+// so "cycle through all of the possible colors" always visits all four
+// before settling, the same way spinFlap cycles the alphabet.
+const CHIP_COLOR_SEQUENCE = ['#028A02', '#1470A9', '#DA7C01', '#B30000'];
+
+function spinFlapColor(flap, targetColor, opts={}){
+  const idx = CHIP_COLOR_SEQUENCE.indexOf(targetColor);
+  const steps = opts.steps ?? (8 + Math.floor(Math.random()*7));
+  const baseDelay = opts.baseDelay ?? 55;
+
+  if (idx === -1){
+    flap._front.style.backgroundColor = targetColor;
+    return Promise.resolve();
+  }
+
+  const sequence = [];
+  for (let i = steps; i >= 0; i--){
+    const pos = ((idx - i) % CHIP_COLOR_SEQUENCE.length + CHIP_COLOR_SEQUENCE.length) % CHIP_COLOR_SEQUENCE.length;
+    sequence.push(CHIP_COLOR_SEQUENCE[pos]);
+  }
+
+  return new Promise(resolve => {
+    let i = 0;
+    function step(){
+      if (i >= sequence.length){ resolve(); return; }
+      const nextColor = sequence[i];
+      flap._back.style.backgroundColor = nextColor;
+      flap._inner.classList.add('flip');
+      onFlipEnd(flap._inner, () => {
+        flap._inner.style.transition = 'none';
+        flap._inner.classList.remove('flip');
+        flap._front.style.backgroundColor = nextColor;
+        void flap._inner.offsetWidth;
+        flap._inner.style.transition = '';
+        i++;
+        const remaining = sequence.length - i;
+        const delay = remaining < 3 ? baseDelay * 1.8 : baseDelay;
+        setTimeout(step, delay);
+      });
+    }
+    step();
   });
 }
 
@@ -662,8 +692,8 @@ async function runSequence(){
     revealGroup(groups.metricGroup, pad(d.metric, W_METRIC), { stagger:12, baseDelay:34 });
     revealGroup(groups.votesGroup,  pad(d.votes, W_VOTES),  { stagger:12, baseDelay:34 });
     revealGroup(groups.scoreGroup,  pad(d.score, W_SCORE),  { stagger:12, baseDelay:34 });
-    setFlapColor(chip, STATUS_CHIP_COLOR[d.status] || '#7d8590');
     await revealGroup(groups.statusGroup, pad(d.status, W_STATUS), { stagger:12, baseDelay:34 });
+    await spinFlapColor(chip, STATUS_CHIP_COLOR[d.status] || '#7d8590', { baseDelay:70 });
     await new Promise(r => setTimeout(r, 160));
   }
 }
@@ -687,7 +717,6 @@ async function resetBoard(){
     g._cells.forEach(c => { c._front.textContent = ' '; });
   });
   rowEls.forEach(({chip}) => {
-    chip._targetColor = null;
     chip._front.style.backgroundColor = '';
     chip._back.style.backgroundColor = '';
   });

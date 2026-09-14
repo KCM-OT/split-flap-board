@@ -300,6 +300,50 @@
   .modal-continue-btn:focus-visible{ outline:2px solid #6fcf97; outline-offset:2px; }
   .modal-continue-btn:disabled{ opacity:.35; cursor:not-allowed; }
 
+  .help-modal-title{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:15px;
+    font-weight:500;
+    color:#c0c3c9;
+    letter-spacing:.04em;
+    margin:0 0 20px;
+  }
+
+  .help-steps{
+    margin:0; padding:0;
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    counter-reset:step-counter;
+  }
+  .help-steps li{
+    counter-increment:step-counter;
+    display:flex;
+    gap:12px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;
+    color:var(--muted);
+    line-height:1.55;
+  }
+  .help-steps li::before{
+    content:counter(step-counter);
+    flex-shrink:0;
+    width:20px; height:20px;
+    background:#1e2024;
+    border:1px solid var(--divider);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:#c0c3c9;
+    margin-top:1px;
+  }
+  .help-steps li strong{ color:#c7cad0; font-weight:600; }
+  .help-steps li em{ color:#6b7280; font-style:normal; }
+
   @media (prefers-reduced-motion: reduce){
     .flap-inner{ transition:none; }
     .row{ transition:none; }
@@ -332,6 +376,13 @@
     <div class="nameplate">
       <span>MODEL SF·24 &nbsp;·&nbsp; SOURCE: MAZE REPORT &nbsp;·&nbsp; N = 2 RESPONDENTS</span>
       <div class="nameplate-actions">
+        <button class="upload-btn" id="help" type="button" aria-label="How to export a MAZE report" title="How to export a MAZE report">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:15px;height:15px;">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </button>
         <button class="upload-btn" id="upload" type="button" aria-label="Upload a MAZE report PDF" title="Upload a MAZE report PDF">
           <svg viewBox="16 7 14 16" fill="currentColor" aria-hidden="true">
             <path d="M23.5 9.71875V18.5C23.5 18.7812 23.2812 19 23 19C22.7188 19 22.5 18.7812 22.5 18.5V9.71875L19.8438 12.3438C19.6562 12.5625 19.3438 12.5625 19.1562 12.3438C18.9688 12.1562 18.9688 11.8438 19.1562 11.6562L22.6562 8.15625C22.8438 7.9375 23.1562 7.9375 23.3438 8.15625L26.8438 11.6562C27.0625 11.8438 27.0625 12.1562 26.8438 12.3438C26.6562 12.5625 26.3438 12.5625 26.1562 12.3438L23.5 9.71875ZM21 18H18C17.4375 18 17 18.4375 17 19V21C17 21.5625 17.4375 22 18 22H28C28.5625 22 29 21.5625 29 21V19C29 18.4375 28.5625 18 28 18H25V17H28C29.0938 17 30 17.9062 30 19V21C30 22.0938 29.0938 23 28 23H18C16.9062 23 16 22.0938 16 21V19C16 17.9062 16.9062 17 18 17H21V18ZM26 20C26 19.5938 26.3438 19.25 26.75 19.25C27.1562 19.25 27.5 19.5938 27.5 20C27.5 20.4062 27.1562 20.75 26.75 20.75C26.3438 20.75 26 20.4062 26 20Z"/>
@@ -362,6 +413,23 @@
       </div>
       <div class="upload-modal-message" id="modal-message"></div>
       <button class="modal-continue-btn" id="modal-continue" type="button" disabled>CONTINUE</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="help-modal-overlay">
+  <div class="upload-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+    <button class="modal-close" id="help-modal-close" type="button" aria-label="Close">&times;</button>
+    <div class="upload-modal-panel">
+      <h2 class="help-modal-title" id="help-modal-title">Exporting a MAZE report</h2>
+      <ol class="help-steps">
+        <li>Log into MAZE.</li>
+        <li>Go to <strong>Studies</strong> on the left-hand side.</li>
+        <li>Find a study that has been published.</li>
+        <li>From within the study, choose <strong>Report</strong> along the top of the page <em>(this opens a new tab)</em>.</li>
+        <li>Click on the blue <strong>Share Report</strong> button.</li>
+        <li>Choose <strong>Download PDF</strong> <em>(note where this is downloaded for later)</em>.</li>
+      </ol>
     </div>
   </div>
 </div>
@@ -1126,12 +1194,24 @@ uploadInput.addEventListener('change', () => {
 });
 modalCloseBtn.addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal();
-});
 modalContinueBtn.addEventListener('click', () => {
   if (pendingUpdate){ resetIdleTimer(); applyNewData(pendingUpdate); }
   closeModal();
+});
+
+// ---- Help modal ----
+const helpModalOverlay = document.getElementById('help-modal-overlay');
+const openHelpModal  = () => helpModalOverlay.classList.add('open');
+const closeHelpModal = () => helpModalOverlay.classList.remove('open');
+
+document.getElementById('help').addEventListener('click', openHelpModal);
+document.getElementById('help-modal-close').addEventListener('click', closeHelpModal);
+helpModalOverlay.addEventListener('click', (e) => { if (e.target === helpModalOverlay) closeHelpModal(); });
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (modalOverlay.classList.contains('open')) closeModal();
+  if (helpModalOverlay.classList.contains('open')) closeHelpModal();
 });
 
 // ---- Idle auto-reset ----

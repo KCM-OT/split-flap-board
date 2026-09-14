@@ -724,8 +724,12 @@ async function resetBoard(){
   runSequence();
 }
 
-document.getElementById('replay').addEventListener('click', resetBoard);
+document.getElementById('replay').addEventListener('click', () => {
+  resetIdleTimer();
+  resetBoard();
+});
 document.getElementById('upload').addEventListener('click', () => {
+  resetIdleTimer();
   document.getElementById('upload-input').click();
 });
 
@@ -1118,7 +1122,7 @@ function applyNewData(update){
 
 uploadInput.addEventListener('change', () => {
   const file = uploadInput.files && uploadInput.files[0];
-  if (file) handleFileSelected(file);
+  if (file){ resetIdleTimer(); handleFileSelected(file); }
 });
 modalCloseBtn.addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
@@ -1126,11 +1130,35 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal();
 });
 modalContinueBtn.addEventListener('click', () => {
-  if (pendingUpdate) applyNewData(pendingUpdate);
+  if (pendingUpdate){ resetIdleTimer(); applyNewData(pendingUpdate); }
   closeModal();
 });
 
+// ---- Idle auto-reset ----
+// After 1 minute with no interaction (no PDF upload, no REFRESH BOARD click),
+// restore the original dataset and replay the board from scratch.
+const INITIAL_DATA      = DATA.map(d => ({ ...d }));
+const INITIAL_HERO_TITLE = HERO_TITLE;
+const INITIAL_NAMEPLATE  = document.querySelector('.nameplate > span').textContent;
+const IDLE_MS = 60_000;
+let idleTimer = null;
+
+function resetIdleTimer(){
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    INITIAL_DATA.forEach((d, i) => { DATA[i] = { ...d }; });
+    if (HERO_TITLE !== INITIAL_HERO_TITLE){
+      HERO_TITLE = INITIAL_HERO_TITLE;
+      rebuildHeroGroup(HERO_TITLE);
+    }
+    document.querySelector('.nameplate > span').textContent = INITIAL_NAMEPLATE;
+    resetBoard();
+    resetIdleTimer(); // keep cycling every minute of continued inactivity
+  }, IDLE_MS);
+}
+
 runSequence();
+resetIdleTimer();
 </script>
 </body>
 </html>

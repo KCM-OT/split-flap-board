@@ -319,7 +319,8 @@
   }
   .help-steps li{
     counter-increment:step-counter;
-    display:flex;
+    display:grid;
+    grid-template-columns:24px 1fr;
     gap:12px;
     font-family:'Inter',sans-serif;
     font-size:13px;
@@ -328,7 +329,6 @@
   }
   .help-steps li::before{
     content:counter(step-counter);
-    flex-shrink:0;
     width:20px; height:20px;
     background:#1e2024;
     border:1px solid var(--divider);
@@ -339,7 +339,7 @@
     font-family:'IBM Plex Mono',monospace;
     font-size:11px;
     color:#c0c3c9;
-    margin-top:1px;
+    margin-top:2px;
   }
   .help-steps li strong{ color:#c7cad0; font-weight:600; }
   .help-steps li em{ color:#6b7280; font-style:normal; }
